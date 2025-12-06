@@ -36,18 +36,19 @@ jobs:
         #2
       - name: Copy artifact for deployment job
         run: |
-         mkdir deploy
+         mkdir -p deploy
          cp -r ./.next/standalone/. ./deploy
-         cp -r ./.next/static/. ./deploy/.next/static
-         
+         cp -r ./.next/static ./deploy/.next/static
+         cp -r ./public ./deploy/public
+
       - name: Zip artifact for deployment
-        run: zip release.zip ./deploy -r #3
+        run: cd deploy && zip -r ../release.zip . #3
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: .
+          path: release.zip
 
   deploy:
     runs-on: ubuntu-latest
@@ -58,7 +59,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
-      
+
+      - name: Unzip artifact for deployment
+        run: unzip release.zip -d deploy
+
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
