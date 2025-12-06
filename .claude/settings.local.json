@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(NEXT_PUBLIC_API_ENDPOINT=https://tech0-gen-11-step3-2-py-45.azurewebsites.net npm run build:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

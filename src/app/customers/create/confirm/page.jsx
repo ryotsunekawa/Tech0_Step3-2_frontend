@@ -2,9 +2,9 @@
 import OneCustomerInfoCard from "@/app/components/one_customer_info_card.jsx";
 import fetchCustomer from "./fetchCustomer";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 
-export default function ConfirmPage() {
+function ConfirmPageContent() {
   const router = useRouter();
   const customer_id = useSearchParams().get("customer_id");
   const [customer, setCustomer] = useState(null);
@@ -15,7 +15,7 @@ export default function ConfirmPage() {
       setCustomer(customerData);
     };
     fetchAndSetCustomer();
-  }, []);
+  }, [customer_id]);
 
   return (
     <>
@@ -29,5 +29,13 @@ export default function ConfirmPage() {
         </button>
       </div>
     </>
+  );
+}
+
+export default function ConfirmPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ConfirmPageContent />
+    </Suspense>
   );
 }
