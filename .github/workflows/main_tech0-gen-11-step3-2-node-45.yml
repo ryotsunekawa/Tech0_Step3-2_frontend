@@ -36,7 +36,7 @@ jobs:
           mkdir -p deploy
           cp -r ./.next/standalone/. ./deploy
           cp -r ./.next/static ./deploy/.next/static
-          cp -r ./public ./deploy/public
+          if [ -d "./public" ]; then cp -r ./public ./deploy/public; fi
 
       - name: Zip artifact for deployment
         run: cd deploy && zip -r ../release.zip .
