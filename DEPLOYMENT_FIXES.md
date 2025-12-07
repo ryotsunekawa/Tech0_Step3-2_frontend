@@ -41,11 +41,11 @@
 
 ## 修正内容の詳細
 
-### 1. 環境変数管理の一元化
+### 1. GitHub Actions ワークフローの環境変数設定（最重要）
 
 #### **問題点**
 
-**重要**: GitHub Secretsに `NEXT_PUBLIC_API_ENDPOINT` を登録していても、**ワークフローファイルで明示的に `env:` で渡さないとビルドプロセスで利用できません**。
+**これが最も本質的な問題です**: GitHub Secretsに `NEXT_PUBLIC_API_ENDPOINT` を登録していても、**ワークフローファイルで明示的に `env:` で渡さないとビルドプロセスで利用できません**。
 
 ##### **なぜ環境変数が `undefined` になったのか**
 
@@ -75,44 +75,35 @@
    fetch(undefined + "/customers")  // → fetch("undefined/customers")
    ```
 
-各ファイルで直接 `process.env.NEXT_PUBLIC_API_ENDPOINT` を使用していたため、環境変数が未定義の場合に以下の問題が発生：
-
 **結果**: ビルド時のプリレンダリングでエラーが発生し、ビルドが失敗する
 
-#### **修正内容**
+#### **修正内容（本質的な解決策）**
 
-**新規ファイル作成**: `src/lib/config.js`
-```javascript
-export const API_ENDPOINT = process.env.NEXT_PUBLIC_API_ENDPOINT;
+**ファイル**: `.github/workflows/main_tech0-gen-11-step3-2-node-45.yml`
 
-if (!API_ENDPOINT) {
-  throw new Error('NEXT_PUBLIC_API_ENDPOINT is not defined');
-}
+```yaml
+# 修正前
+- name: npm install, build, and test
+  run: |
+    npm install
+    npm run build --if-present
 ```
 
-**各ファイルで使用**:
-```javascript
-// 修正後
-import { API_ENDPOINT } from "@/lib/config";
-
-fetch(`${API_ENDPOINT}/customers`)
+```yaml
+# 修正後
+- name: npm install, build, and test
+  env:
+    NEXT_PUBLIC_API_ENDPOINT: ${{ secrets.NEXT_PUBLIC_API_ENDPOINT }}  # ← これが必須！
+  run: |
+    npm install
+    npm run build --if-present
 ```
 
-**修正したファイル**:
-- `src/app/customers/fetchCustomers.js`
-- `src/app/customers/create/createCustomer.js`
-- `src/app/customers/create/confirm/fetchCustomer.js`
-- `src/app/customers/delete/[id]/deleteCustomer.js`
-- `src/app/customers/delete/[id]/fetchCustomer.js`
-- `src/app/customers/read/[id]/fetchCustomer.js`
-- `src/app/customers/update/[id]/fetchCustomer.js`
-- `src/app/customers/update/[id]/updateCustomer.js`
-- `src/app/customers/check/page.jsx`
+**重要**: **この `env:` 設定さえあれば、以下は不要です**：
+- `src/lib/config.js` の作成
+- 9つのfetchファイルの修正
 
-**効果**:
-- 環境変数が未定義の場合、**明確なエラーメッセージ**でビルド開始直後に失敗
-- デバッグが容易になり、原因の特定が速くなる
-- コードの可読性と保守性が向上
+**効果**: ビルド時に環境変数が注入され、`NEXT_PUBLIC_` プレフィックスの変数が静的にバンドルされる
 
 ---
 
@@ -208,7 +199,7 @@ export default function ConfirmPage() {
 
 ---
 
-### 3. Next.js standalone モードの設定
+### 3. Next.js standalone モードの設定（Azure App Service向け最適化）
 
 #### **standalone モードとは**
 
@@ -317,45 +308,20 @@ const nextConfig = {
 
 ---
 
-### 4. GitHub Actions ワークフローの修正
+### 4. GitHub Actions ワークフローの standalone 対応
 
 #### **問題点**
 
 元のワークフローには以下の問題がありました：
 
-1. **環境変数がビルド時に設定されていない**
-2. **デプロイ用ファイルの構成が不完全**
-3. **standalone出力のファイル構造に対応していない**
+1. **デプロイ用ファイルの構成が不完全**
+2. **standalone出力のファイル構造に対応していない**
 
 #### **修正内容**
 
 **ファイル**: `.github/workflows/main_tech0-gen-11-step3-2-node-45.yml`
 
-##### **修正1: ビルド時の環境変数設定**
-
-```yaml
-# 修正前
-- name: npm install, build, and test
-  run: |
-    npm install
-    npm run build --if-present
-```
-
-```yaml
-# 修正後
-- name: npm install, build, and test
-  env:
-    NEXT_PUBLIC_API_ENDPOINT: ${{ secrets.NEXT_PUBLIC_API_ENDPOINT }}  # ← 追加
-  run: |
-    npm install
-    npm run build --if-present
-```
-
-**効果**: ビルド時に環境変数が注入され、`NEXT_PUBLIC_` プレフィックスの変数が静的にバンドルされる
-
----
-
-##### **修正2: デプロイ用ファイルのコピー**
+##### **修正1: デプロイ用ファイルのコピー**
 
 ```yaml
 # 修正前（この処理自体が存在しなかった）
@@ -386,7 +352,7 @@ deploy/
 
 ---
 
-##### **修正3: アーティファクトのzip化**
+##### **修正2: アーティファクトのzip化**
 
 ```yaml
 # 修正前（zip化されていなかった）
@@ -415,7 +381,7 @@ deploy/
 
 ---
 
-##### **修正4: デプロイステップの改善**
+##### **修正3: デプロイステップの改善**
 
 ```yaml
 # 修正前
@@ -454,13 +420,15 @@ deploy/
 
 ## 変更理由の要約表
 
-| 修正箇所 | 変更理由 | 変更前の問題 | 変更後の効果 |
-|---------|---------|-------------|-------------|
-| **`src/lib/config.js`（新規）** | 環境変数管理の一元化 | 環境変数未定義時に不明瞭なエラー | 明確なエラーメッセージでデバッグが容易 |
-| **`src/app/customers/check/page.jsx`** | Next.js App Router対応 | `query`（Pages Router）を使用 | `searchParams`（App Router）で正しく動作 |
-| **`src/app/customers/create/confirm/page.jsx`** | Suspense対応 | `useSearchParams()` がラップされていない | ビルド成功、ローディング状態の適切な管理 |
-| **`next.config.js`** | standalone モード有効化 | `server.js` が生成されない | Azure App Serviceで実行可能 |
-| **GitHub Actionsワークフロー** | ビルド・デプロイプロセス最適化 | 環境変数未設定、ファイル構成不適切 | 正しいビルド・効率的なデプロイ |
+| 修正箇所 | 変更理由 | 必須/オプション | 変更前の問題 | 変更後の効果 |
+|---------|---------|--------------|-------------|-------------|
+| **ワークフローの`env:`設定** | ビルド時に環境変数を渡す | **必須** | 環境変数が`undefined`でビルド失敗 | 環境変数が正しくバンドルされる |
+| **`src/app/customers/check/page.jsx`** | Next.js App Router対応 | **必須** | `query`（Pages Router）を使用 | `searchParams`（App Router）で正しく動作 |
+| **`src/app/customers/create/confirm/page.jsx`** | Suspense対応 | **必須** | `useSearchParams()` がラップされていない | ビルド成功、ローディング状態の適切な管理 |
+| **`next.config.js`** | standalone モード有効化 | **必須** | `server.js` が生成されない | Azure App Serviceで実行可能 |
+| **ワークフローの standalone 対応** | デプロイファイル構成 | **必須** | ファイル構成不適切 | 効率的なデプロイ |
+| **`src/lib/config.js`（新規）** | 環境変数管理の一元化 | オプション | 環境変数未定義時に不明瞭なエラー | 明確なエラーメッセージでデバッグが容易 |
+| **9つのfetchファイル修正** | `API_ENDPOINT` import | オプション | - | コードの可読性向上 |
 
 ---
 
@@ -510,14 +478,14 @@ export default function Page() {
 
 ---
 
-### 3. **環境変数の扱い**
+### 3. **環境変数の扱い（オプション）**
 
 ```javascript
-// ❌ 古い（エラーハンドリングなし）
+// ✅ 基本形（ワークフローで env: 設定があれば十分）
 const endpoint = process.env.NEXT_PUBLIC_API_ENDPOINT;
-fetch(endpoint + "/api");  // undefined の場合エラー
+fetch(`${endpoint}/api`);
 
-// ✅ 新しい（共通設定で一元管理）
+// ✅ より良い形（エラーハンドリング強化 - オプション）
 // src/lib/config.js
 export const API_ENDPOINT = process.env.NEXT_PUBLIC_API_ENDPOINT;
 if (!API_ENDPOINT) {
@@ -528,6 +496,8 @@ if (!API_ENDPOINT) {
 import { API_ENDPOINT } from "@/lib/config";
 fetch(`${API_ENDPOINT}/api`);
 ```
+
+**注意**: `src/lib/config.js` の作成は**必須ではありません**。ワークフローで `env:` 設定があれば、直接 `process.env.NEXT_PUBLIC_API_ENDPOINT` を使用しても問題ありません。
 
 ---
 
@@ -553,10 +523,14 @@ export default async function Page({ searchParams }) {
 
 今回の修正により、以下が達成されました：
 
-1. ✅ **Next.js App Router（最新仕様）への完全対応**
-2. ✅ **環境変数管理の一元化とエラーハンドリング強化**
-3. ✅ **Azure App Service向けの最適化されたビルド・デプロイフロー**
-4. ✅ **GitHub Actionsによる自動化されたCI/CDパイプライン**
-5. ✅ **保守性とデバッグ性の向上**
+### 必須の修正（これがないとデプロイできない）
+1. ✅ **ワークフローファイルへの `env:` 設定追加** - 環境変数の正しい受け渡し
+2. ✅ **Next.js App Router（最新仕様）への完全対応** - Pages Routerから移行
+3. ✅ **standalone モード設定** - Azure App Service向け最適化
+4. ✅ **ワークフローの standalone 対応** - デプロイファイル構成の改善
 
-これにより、安定したデプロイプロセスと、将来的なメンテナンスの容易さが確保されました。
+### オプションの修正（デバッグ・保守性向上）
+5. ✅ **環境変数管理の一元化** - エラーメッセージの改善
+6. ✅ **fetchファイルのリファクタリング** - コードの可読性向上
+
+**重要**: 本質的な問題は「ワークフローファイルに `env:` 設定を忘れないこと」です。これにより、安定したデプロイプロセスが確保されました。
